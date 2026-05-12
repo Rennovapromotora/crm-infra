@@ -1,0 +1,177 @@
+# Stack integrado CRM (API Laravel + frontend React).
+#
+# Espera os repositórios irmãos por padrão:
+#   ../crm-api       e ../crm-rennova   (dentro da pasta rennova/)
+#
+# Desenvolvimento:
+#   cp .env.development.example .env
+#   docker compose --env-file .env up -d --build
+#
+#   API:  http://localhost:8000
+#   API JSON: http://localhost:8000/api/...
+#   Front: porta WEB_HTTP_PORT (padrão 8082)
+#
+# Migrações (uma vez):
+#   docker compose exec api php artisan migrate
+
+name: crm-infra
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: crm-infra-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-crm_rennova}
+      MYSQL_USER: ${MYSQL_USER:-crm}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-crm}
+    ports:
+      - "${MYSQL_PUBLISH_PORT:-3307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - crm
+
+  redis:
+    image: redis:7-alpine
+    container_name: crm-infra-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PUBLISH_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - crm
+
+  api:
+    build:
+      context: ${CRM_API_PATH:-../crm-api}
+      dockerfile: Dockerfile
+      target: production
+    image: crm-infra-api:${CRM_INFRA_TAG:-dev}
+    container_name: crm-infra-api
+    restart: unless-stopped
+    ports:
+      - "${API_HTTP_PORT:-8000}:80"
+    environment:
+      APP_NAME: "${API_APP_NAME:-Rennova API}"
+      APP_ENV: "${API_APP_ENV:-local}"
+      APP_KEY: "${APP_KEY:-base64:gsGSVZwrUphLt1fm/pvvuzcZDhUTC78XTLlKKcyvX2Y=}"
+      APP_DEBUG: "${API_APP_DEBUG:-true}"
+      APP_URL: "${API_APP_URL:-http://localhost:8000}"
+
+      APP_TIMEZONE: "${APP_TIMEZONE:-America/Sao_Paulo}"
+      APP_LOCALE: "${APP_LOCALE:-pt_BR}"
+      APP_FALLBACK_LOCALE: "${APP_FALLBACK_LOCALE:-pt_BR}"
+
+      LOG_CHANNEL: "${API_LOG_CHANNEL:-stack}"
+      LOG_LEVEL: "${API_LOG_LEVEL:-debug}"
+
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${MYSQL_DATABASE:-crm_rennova}
+      DB_USERNAME: ${MYSQL_USER:-crm}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-crm}
+
+      BROADCAST_CONNECTION: log
+      CACHE_STORE: redis
+      FILESYSTEM_DISK: public
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      SESSION_LIFETIME: "${SESSION_LIFETIME:-120}"
+
+      REDIS_CLIENT: predis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-null}"
+
+      SANCTUM_TOKEN_EXPIRATION: "${SANCTUM_TOKEN_EXPIRATION:-1440}"
+      SANCTUM_STATEFUL_DOMAINS: "${SANCTUM_STATEFUL_DOMAINS:-localhost,localhost:${WEB_HTTP_PORT:-8082},127.0.0.1}"
+
+      FRONTEND_URL: "${FRONTEND_URL:-http://localhost:${WEB_HTTP_PORT:-8082}}"
+      TRUST_PROXY: "${TRUST_PROXY:-false}"
+      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-*}"
+
+      MAIL_MAILER: "${MAIL_MAILER:-log}"
+      MAIL_HOST: "${MAIL_HOST:-127.0.0.1}"
+      MAIL_PORT: "${MAIL_PORT:-2525}"
+      MAIL_USERNAME: "${MAIL_USERNAME:-}"
+      MAIL_PASSWORD: "${MAIL_PASSWORD:-}"
+      MAIL_ENCRYPTION: "${MAIL_ENCRYPTION:-null}"
+      MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS:-noreply@rennova.com.br}"
+      MAIL_FROM_NAME: "${MAIL_FROM_NAME:-Rennova API}"
+
+      BANK_CONSULTATION_QUEUE: "${BANK_CONSULTATION_QUEUE:-bank-consultations}"
+      BANK_CONSULTATION_TIMEOUT: "${BANK_CONSULTATION_TIMEOUT:-30}"
+      BANK_CONSULTATION_ALLOWED_DRIVERS: "${BANK_CONSULTATION_ALLOWED_DRIVERS:-facta}"
+
+      FACTA_ENABLED: "${FACTA_ENABLED:-true}"
+      FACTA_API_URL: "${FACTA_API_URL:-https://webservice-homol.facta.com.br}"
+      FACTA_API_USERNAME: "${FACTA_API_USERNAME:-}"
+      FACTA_API_PASSWORD: "${FACTA_API_PASSWORD:-}"
+      FACTA_OFFLINE_URL: "${FACTA_OFFLINE_URL:-https://cltoff.facta.com.br/clt/base-offline}"
+      FACTA_TOKEN_RENEWAL_BUFFER_SECONDS: "${FACTA_TOKEN_RENEWAL_BUFFER_SECONDS:-120}"
+      FACTA_PRODUTO: "${FACTA_PRODUTO:-D}"
+      FACTA_TIPO_OPERACAO: "${FACTA_TIPO_OPERACAO:-13}"
+      FACTA_AVERBADOR: "${FACTA_AVERBADOR:-10010}"
+      FACTA_CONVENIO: "${FACTA_CONVENIO:-3}"
+      FACTA_OPCAO_VALOR: "${FACTA_OPCAO_VALOR:-1}"
+      FACTA_TIPO_ENVIO: "${FACTA_TIPO_ENVIO:-WHATSAPP}"
+      FACTA_POLICY_PRAZO_DEFAULT: "${FACTA_POLICY_PRAZO_DEFAULT:-180}"
+      FACTA_POLICY_VALOR_EMPRESTIMO_DEFAULT: "${FACTA_POLICY_VALOR_EMPRESTIMO_DEFAULT:-18000}"
+      FACTA_OPERATIONS_PRAZO_DEFAULT: "${FACTA_OPERATIONS_PRAZO_DEFAULT:-180}"
+      FACTA_OPERATIONS_VALOR_DEFAULT: "${FACTA_OPERATIONS_VALOR_DEFAULT:-18000}"
+
+      C6BANK_ENABLED: "${C6BANK_ENABLED:-false}"
+      C6BANK_API_URL: "${C6BANK_API_URL:-https://marketplace-proposal-service-api-p.c6bank.info}"
+      C6BANK_USERNAME: "${C6BANK_USERNAME:-}"
+      C6BANK_PASSWORD: "${C6BANK_PASSWORD:-}"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - crm
+
+  web:
+    build:
+      context: ${CRM_WEB_PATH:-../crm-rennova}
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:8000/api}
+        REACT_APP_API_KEY: ${REACT_APP_API_KEY:-}
+        REACT_APP_API_KEY_HEADER: ${REACT_APP_API_KEY_HEADER:-X-API-KEY}
+        REACT_APP_ZAPI_INSTANCE_ID: ${REACT_APP_ZAPI_INSTANCE_ID:-}
+        REACT_APP_ZAPI_ACCESS_TOKEN: ${REACT_APP_ZAPI_ACCESS_TOKEN:-}
+        REACT_APP_ZAPI_CLIENT_TOKEN: ${REACT_APP_ZAPI_CLIENT_TOKEN:-}
+    image: crm-infra-web:${CRM_INFRA_TAG:-dev}
+    container_name: crm-infra-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_HTTP_PORT:-8082}:80"
+    depends_on:
+      - api
+    networks:
+      - crm
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  crm:
+    driver: bridge

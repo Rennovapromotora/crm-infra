@@ -1,0 +1,17 @@
+Coloque aqui os arquivos TLS usados pelo Nginx edge em produção (docker-compose.prod.yml):
+
+  crm-fullchain.pem   → certificado completo (leaf + intermediários)
+  crm-privkey.pem     → chave privada do domínio crm.rennovafgts.com.br
+
+  api-fullchain.pem
+  api-privkey.pem     → mesmo par para api.rennovafgts.com.br
+
+Se usar um único certificado SAN cobrindo os dois hosts, você pode copiar o mesmo arquivo
+para os quatro nomes acima ou criar symlinks.
+
+Origem típica (Certbot em Linux):
+
+  sudo cp /etc/letsencrypt/live/crm.rennovafgts.com.br/fullchain.pem ./crm-fullchain.pem
+  sudo cp /etc/letsencrypt/live/crm.rennovafgts.com.br/privkey.pem   ./crm-privkey.pem
+
+Repita para o host da API se os certificados forem diferentes.
